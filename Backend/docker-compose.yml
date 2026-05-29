@@ -1,0 +1,76 @@
+version: '3.9'
+
+services:
+
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: videoplatform-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: videoplatform
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: videoplatform-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── ViMax Python Service ──────────────────────────────────────────────────
+  # Uncomment after you create services/vimax/Dockerfile
+  # vimax-service:
+  #   build:
+  #     context: ../services/vimax
+  #     dockerfile: Dockerfile
+  #   container_name: videoplatform-vimax
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8000:8000"
+  #   environment:
+  #     GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY}
+  #     OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+  #   volumes:
+  #     - vimax_output:/app/.working_dir
+
+  # ── Node.js Backend ───────────────────────────────────────────────────────
+  # Uncomment after backend is built and tested locally
+  # backend:
+  #   build:
+  #     context: ../backend
+  #     dockerfile: Dockerfile
+  #   container_name: videoplatform-backend
+  #   restart: unless-stopped
+  #   ports:
+  #     - "3001:3001"
+  #   env_file:
+  #     - ../backend/.env
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+  # vimax_output:
