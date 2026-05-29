@@ -1,0 +1,195 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── USER ─────────────────────────────────────────────────────────────────────
+model User {
+  id           String   @id
+  email        String   @unique
+  displayName  String?
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  wallet       Wallet?
+  jobs         Job[]
+  transactions Transaction[]
+  apiUsageLogs ApiUsageLog[]
+  assets       Asset[]
+  chatSessions ChatSession[]   // ← NEW: dashboard AI chat history
+
+  @@map("users")
+}
+
+// ─── WALLET ───────────────────────────────────────────────────────────────────
+model Wallet {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance   Decimal  @default(0) @db.Decimal(12, 4)
+  currency  String   @default("INR")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions Transaction[]
+
+  @@index([userId])
+  @@map("wallets")
+}
+
+// ─── TRANSACTION ──────────────────────────────────────────────────────────────
+model Transaction {
+  id          String            @id @default(cuid())
+  userId      String
+  user        User              @relation(fields: [userId], references: [id])
+  walletId    String
+  wallet      Wallet            @relation(fields: [walletId], references: [id])
+  type        TransactionType
+  amount      Decimal           @db.Decimal(12, 4)
+  currency    String            @default("INR")
+  status      TransactionStatus @default(PENDING)
+  razorpayId  String?
+  jobId       String?
+  description String?
+  metadata    Json?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([userId])
+  @@index([jobId])
+  @@index([status])
+  @@map("transactions")
+}
+
+enum TransactionType {
+  TOPUP
+  JOB_DEDUCT
+  REFUND
+  PLATFORM_FEE
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+// ─── JOB ──────────────────────────────────────────────────────────────────────
+model Job {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+  type           JobType
+  status         JobStatus @default(QUEUED)
+  provider       String    // "muapi" | "vimax" | "openai"
+  model          String?
+  prompt         String
+  parameters     Json?
+  outputUrl      String?
+  outputMetadata Json?
+  estimatedCost  Decimal?  @db.Decimal(10, 4)
+  actualCost     Decimal?  @db.Decimal(10, 4)
+  platformFee    Decimal?  @db.Decimal(10, 4)
+  errorMessage   String?
+  bullJobId      String?
+  progress       Int       @default(0)
+  stageLog       Json?     // stage updates array OR blueprint data for openai jobs
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  apiUsageLogs ApiUsageLog[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([type])
+  @@index([provider])
+  @@map("jobs")
+}
+
+enum JobType {
+  AGENT
+  VIMAX
+}
+
+enum JobStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// ─── CHAT SESSION ─────────────────────────────────────────────────────────────
+// Stores AI assistant chat history for the dashboard
+model ChatSession {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id])
+  title     String?       // auto-generated from first message
+  messages  ChatMessage[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([userId])
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id        String      @id @default(cuid())
+  sessionId String
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role      String      // "user" | "assistant"
+  content   String
+  createdAt DateTime    @default(now())
+
+  @@index([sessionId])
+  @@map("chat_messages")
+}
+
+// ─── API USAGE LOG ────────────────────────────────────────────────────────────
+model ApiUsageLog {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  jobId        String?
+  job          Job?     @relation(fields: [jobId], references: [id])
+  provider     String   // "muapi" | "vimax" | "openai" | "google"
+  model        String
+  endpoint     String
+  inputTokens  Int?
+  outputTokens Int?
+  providerCost Decimal? @db.Decimal(10, 6)
+  creditsCost  Decimal? @db.Decimal(10, 4)
+  status       String
+  requestId    String?
+  durationMs   Int?
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([jobId])
+  @@index([provider])
+  @@map("api_usage_logs")
+}
+
+// ─── ASSET ────────────────────────────────────────────────────────────────────
+model Asset {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  filename  String
+  mimeType  String
+  sizeBytes Int
+  s3Key     String
+  s3Url     String
+  purpose   String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("assets")
+}
